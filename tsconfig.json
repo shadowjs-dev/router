@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "jsxImportSource": "@shadow-js/core"
+  },
+  "include": ["src", "examples/**/*", "benchmark/**/*"]
+}

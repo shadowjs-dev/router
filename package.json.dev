@@ -1,0 +1,25 @@
+{
+  "name": "@shadow-js/router-dev",
+  "private": true,
+  "description": "Development setup for ShadowJS Router",
+  "scripts": {
+    "dev": "npm run build && npm run test:watch",
+    "build": "tsup",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src --ext .ts,.tsx",
+    "format": "prettier --write src/**/*.{ts,tsx}"
+  },
+  "dependencies": {
+    "@shadow-js/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.4",
+    "@vitest/coverage-v8": "^2.0.5",
+    "jsdom": "^25.0.0",
+    "tsup": "^8.1.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
