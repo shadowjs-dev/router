@@ -51,8 +51,7 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "changeset publish",
-    "build:types": "tsc --emitDeclarationOnly --outDir dist",
-    "prepublishOnly": "npm run build && npm run build:types"
+    "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
     "@shadow-js/core": "^0.1.0"
