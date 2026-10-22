@@ -1,0 +1,160 @@
+{
+  "name": "@shadow-js/router",
+  "version": "1.0.0",
+  "description": "A type-safe router with nested routes, loaders and link prefetching",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/dev/index.d.ts",
+      "development": "./dist/dev/index.js",
+      "default": "./dist/prod/index.js"
+    },
+    "./core": {
+      "types": "./dist/dev/core/index.d.ts",
+      "development": "./dist/dev/core/index.js",
+      "default": "./dist/prod/core/index.js"
+    },
+    "./vite": {
+      "types": "./dist/vite/index.d.ts",
+      "default": "./dist/vite/index.js"
+    },
+    "./scroll": {
+      "types": "./dist/dev/features/scroll.d.ts",
+      "development": "./dist/dev/features/scroll.js",
+      "default": "./dist/prod/features/scroll.js"
+    },
+    "./loaders": {
+      "types": "./dist/dev/features/loaders.d.ts",
+      "development": "./dist/dev/features/loaders.js",
+      "default": "./dist/prod/features/loaders.js"
+    },
+    "./head": {
+      "types": "./dist/dev/features/head.d.ts",
+      "development": "./dist/dev/features/head.js",
+      "default": "./dist/prod/features/head.js"
+    },
+    "./errors": {
+      "types": "./dist/dev/features/errors.d.ts",
+      "development": "./dist/dev/features/errors.js",
+      "default": "./dist/prod/features/errors.js"
+    },
+    "./filters": {
+      "types": "./dist/dev/features/filters.d.ts",
+      "development": "./dist/dev/features/filters.js",
+      "default": "./dist/prod/features/filters.js"
+    },
+    "./blockers": {
+      "types": "./dist/dev/features/blockers.d.ts",
+      "development": "./dist/dev/features/blockers.js",
+      "default": "./dist/prod/features/blockers.js"
+    },
+    "./transitions": {
+      "types": "./dist/dev/features/transitions.d.ts",
+      "development": "./dist/dev/features/transitions.js",
+      "default": "./dist/prod/features/transitions.js"
+    },
+    "./prefetch": {
+      "types": "./dist/dev/features/prefetch.d.ts",
+      "development": "./dist/dev/features/prefetch.js",
+      "default": "./dist/prod/features/prefetch.js"
+    },
+    "./prefetch-report": {
+      "types": "./dist/dev/features/prefetch-report.d.ts",
+      "development": "./dist/dev/features/prefetch-report.js",
+      "default": "./dist/prod/features/prefetch-report.js"
+    },
+    "./relative": {
+      "types": "./dist/dev/features/relative.d.ts",
+      "development": "./dist/dev/features/relative.js",
+      "default": "./dist/prod/features/relative.js"
+    },
+    "./announcer": {
+      "types": "./dist/dev/features/announcer.d.ts",
+      "development": "./dist/dev/features/announcer.js",
+      "default": "./dist/prod/features/announcer.js"
+    },
+    "./link-status": {
+      "types": "./dist/dev/features/link-status.d.ts",
+      "development": "./dist/dev/features/link-status.js",
+      "default": "./dist/prod/features/link-status.js"
+    },
+    "./search": {
+      "types": "./dist/dev/features/search.d.ts",
+      "development": "./dist/dev/features/search.js",
+      "default": "./dist/prod/features/search.js"
+    },
+    "./not-found": {
+      "types": "./dist/dev/features/not-found.d.ts",
+      "development": "./dist/dev/features/not-found.js",
+      "default": "./dist/prod/features/not-found.js"
+    },
+    "./pending": {
+      "types": "./dist/dev/features/pending.d.ts",
+      "development": "./dist/dev/features/pending.js",
+      "default": "./dist/prod/features/pending.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown --config-loader native",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "biome check .",
+    "test": "vitest run --project unit --project dom --project server",
+    "test:gc": "vitest run --project gc --passWithNoTests",
+    "test:perf": "vitest run --project perf --passWithNoTests",
+    "check": "npm run lint && npm run typecheck && npm run build && npm test && npm run test:perf && npm run test:gc"
+  },
+  "dependencies": {
+    "magic-string": "^1.4.3",
+    "oxc-parser": "0.153.0"
+  },
+  "peerDependencies": {
+    "@shadow-js/core": "^1.0.0",
+    "@shadow-js/web": "^1.0.0",
+    "vite": "^7.0.0 || ^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@shadow-js/compiler": "^1.0.0",
+    "@shadow-js/core": "^1.0.0",
+    "@shadow-js/web": "^1.0.0",
+    "@types/node": "^24.0.0",
+    "fast-check": "^4.10.2",
+    "happy-dom": "^21.0.3",
+    "tsdown": "0.23.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.3",
+    "vitest": "5.0.3"
+  },
+  "homepage": "https://router.shadowjs.net",
+  "keywords": [
+    "shadowjs",
+    "router"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shadowjs-dev/router.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shadowjs-dev/router/issues"
+  }
+}

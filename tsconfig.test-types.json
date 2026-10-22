@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "jsxImportSource": "@shadow-js/web",
+    "noEmit": true,
+    "isolatedDeclarations": false,
+    "paths": {
+      "@shadow-js/router": ["./src/index.ts"],
+      "@shadow-js/router/core": ["./src/core/index.ts"],
+      "@shadow-js/router/scroll": ["./src/features/scroll.ts"],
+      "@shadow-js/router/loaders": ["./src/features/loaders.ts"],
+      "@shadow-js/router/head": ["./src/features/head.ts"],
+      "@shadow-js/router/errors": ["./src/features/errors.ts"],
+      "@shadow-js/router/filters": ["./src/features/filters.ts"],
+      "@shadow-js/router/blockers": ["./src/features/blockers.ts"],
+      "@shadow-js/router/transitions": ["./src/features/transitions.ts"],
+      "@shadow-js/router/relative": ["./src/features/relative.ts"]
+    }
+  },
+  "include": ["test-types", "types"]
+}
