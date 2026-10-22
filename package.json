@@ -120,7 +120,7 @@
   },
   "dependencies": {
     "magic-string": "^1.4.3",
-    "oxc-parser": "0.153.0"
+    "oxc-parser": "0.154.0"
   },
   "peerDependencies": {
     "@shadow-js/core": "^1.0.0",
