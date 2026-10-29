@@ -426,7 +426,12 @@ export function createRouter(options: RouterOptions): Router {
     const resolved = resolveLocation(history.location, normalized);
     const canonical = canonicalizePathname(resolved.pathname, trailingSlash);
     if (canonical === undefined) return undefined;
-    const pathname = normalized.startsWith("/") ? matcher.addBase(canonical) : canonical;
+    // The root keeps its slash under the base unless the policy is `never`.
+    const pathname = !normalized.startsWith("/")
+      ? canonical
+      : canonical === "/" && trailingSlash !== "never"
+        ? matcher.addBase("") + canonical
+        : matcher.addBase(canonical);
     return { pathname, search: resolved.search, hash: resolved.hash };
   };
 

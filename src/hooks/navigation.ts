@@ -174,8 +174,9 @@ export function useSearchParams<S = SearchRecord>(
   };
   const batch = createSearchBatch((patch, replace) => {
     const hash = location.hash;
-    // The current pathname is an href the app renders; the router checks it like any other target.
-    void router.navigate(location.pathname as HrefOf, {
+    // The current path with its query is an href the app renders; the router checks it like any other
+    // target. The query goes in `to` because a search patch merges into the query of `to`, not of the page.
+    void router.navigate(`${location.pathname}${location.search}` as HrefOf, {
       search: patch,
       replace,
       ...(hash === "" ? {} : { hash }),

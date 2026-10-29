@@ -680,7 +680,10 @@ export interface Router {
   navigate(to: HrefOf, options?: NavigateToOptions): Promise<NavigationOutcome>;
   /** Loads the data of a target into the cache without changing the location. */
   preload(to: HrefOf, options?: RouterPreloadOptions): Promise<void>;
-  /** Marks loader data stale (all, or the matching ids) and reloads the current location. */
+  /**
+   * Marks loader data stale (all, or the matching ids) and reloads the current location. A navigation
+   * in flight is not canceled: the reload waits for it and then reloads the location it reached.
+   */
   invalidate(filter?: InvalidateFilter): Promise<NavigationOutcome>;
   /** Loads the current location once. Hydrated data is used without refetching. */
   ready(): Promise<NavigationOutcome>;

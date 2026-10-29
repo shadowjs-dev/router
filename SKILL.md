@@ -5,7 +5,7 @@ description: "Work with @shadow-js/router. A type-safe router with nested routes
 
 # @shadow-js/router
 
-Version 1.0.2. A type-safe router with nested routes, loaders and link prefetching.
+Version 1.0.3. A type-safe router with nested routes, loaders and link prefetching.
 
 ## Where to read more
 
@@ -23,8 +23,8 @@ npm install @shadow-js/router @shadow-js/core @shadow-js/web
 
 | Package | Range | Required |
 | --- | --- | --- |
-| `@shadow-js/core` | `^1.0.2` | yes |
-| `@shadow-js/web` | `^1.0.2` | yes |
+| `@shadow-js/core` | `^1.0.3` | yes |
+| `@shadow-js/web` | `^1.0.3` | yes |
 | `vite` | `^7.0.0 || ^8.0.0` | no |
 
 ## Import paths

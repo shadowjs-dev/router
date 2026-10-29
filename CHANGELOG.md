@@ -1,20 +1,34 @@
 # Changelog
 
+## 1.0.3
+
+### Fixed
+
+- `resolveSameOrigin` collapses leading slashes left by dot segments (`/.//host`, `/%2e//x`, `/./\x`) so the result is always a same-origin path, and `unsafeHref` refuses that shape.
+- The `useSearchParams` setter merges into the current query, so `setParams({ a: 3 })` on `?a=1&b=2` gives `?a=3&b=2`.
+- `useBlocker` returns to `idle` when a later navigation replaces the held one and gets through.
+- With a base path and a trailing-slash policy of `always` or `preserve`, a target keeps its slash under the base (the root becomes `/app/`).
+- A malformed path (`/%zz`, `/a//b`) commits like an unmatched one: the not-found UI renders and `navigate` moves the URL.
+- A native fragment navigation is adopted as a new history entry, so Back and Forward work after a `#fragment` click.
+- `invalidate()`, `reload` and `hydrate` wait for a navigation in flight instead of canceling it.
+- A percent-encoded byte order mark (`/%EF%BB%BF`) is no longer dropped from a path segment.
+- Seeded loader data dated after the client's clock is read as loaded now, so it expires after `staleTime`.
+
 ## 1.0.2
 
 ### Fixed
 
-- - A loader that failed is refetched at the next visit instead of being served as fresh data for the rest of `staleTime`.
-- - A load that an `invalidate` overtook lands as stale, and a reload no longer joins it.
-- - `navigate`, `preload`, `invalidate`, `ready` and `href` run untracked, and blockers run their predicates untracked, so an effect that navigates no longer subscribes to what `beforeLoad` or a blocker reads.
-- - Destroying a router with a visible pending UI no longer leaves its minimum-display timer running.
-- - A preload no longer leaves a listener on the caller's `AbortSignal`.
-- - `useSearchParams` reads queries up to the router's `maxSearchLength` instead of the 4096 default.
-- - A `%2e` or `%2E` dot segment in a navigation target is resolved like `.` and `..`, as the browser does, so the router's location matches the address bar.
-- - `<A>` is active at the same page written in another case when the router ignores case.
-- - A prefetch task that throws synchronously is reported to the router's error handler.
-- - `redirect(to, { replace })` (and the object form's `replace`) is honored by the navigator: `true` replaces the current entry and `false` pushes, whichever the redirected navigation did. Without it the navigation keeps its own mode; the documentation now says so.
-- - `buildPath` and `buildPathFromParams` throw a `RangeError` for a param value (or splat piece) of `.` or `..`, which a browser collapses into another page.
+- A loader that failed is refetched at the next visit instead of being served as fresh data for the rest of `staleTime`.
+- A load that an `invalidate` overtook lands as stale, and a reload no longer joins it.
+- `navigate`, `preload`, `invalidate`, `ready` and `href` run untracked, and blockers run their predicates untracked, so an effect that navigates no longer subscribes to what `beforeLoad` or a blocker reads.
+- Destroying a router with a visible pending UI no longer leaves its minimum-display timer running.
+- A preload no longer leaves a listener on the caller's `AbortSignal`.
+- `useSearchParams` reads queries up to the router's `maxSearchLength` instead of the 4096 default.
+- A `%2e` or `%2E` dot segment in a navigation target is resolved like `.` and `..`, as the browser does, so the router's location matches the address bar.
+- `<A>` is active at the same page written in another case when the router ignores case.
+- A prefetch task that throws synchronously is reported to the router's error handler.
+- `redirect(to, { replace })` (and the object form's `replace`) is honored by the navigator: `true` replaces the current entry and `false` pushes, whichever the redirected navigation did. Without it the navigation keeps its own mode; the documentation now says so.
+- `buildPath` and `buildPathFromParams` throw a `RangeError` for a param value (or splat piece) of `.` or `..`, which a browser collapses into another page.
 
 ## 1.0.1
 

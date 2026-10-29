@@ -46,10 +46,12 @@ export function unsafeHref(path: string): RuntimeHref {
   if (__DEV__) {
     // The raw input is tested: normalizing first would turn `//host` into the same-origin `/host`.
     const normalized = normalizeNavigationText(path);
+    // `/.//host` is refused too: its dot segments leave `//host`, which a browser reads as another origin.
     const sameOrigin =
       normalized !== undefined &&
       !isProtocolRelative(path) &&
-      resolveSameOrigin(normalized, CHECK_BASE) !== undefined;
+      resolveSameOrigin(normalized, CHECK_BASE) !== undefined &&
+      !new URL(normalized, CHECK_BASE).pathname.startsWith("//");
     if (!sameOrigin) {
       throw new TypeError(
         `unsafeHref: ${JSON.stringify(path)} is not a same-origin path. Validate the target first (a relative path or a path starting with "/"), or use a registered route.`,

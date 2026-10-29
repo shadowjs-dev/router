@@ -79,17 +79,6 @@ function octetAt(text: string, index: number): number {
   return HEX_PAIR.test(pair) ? Number.parseInt(pair, 16) : -1;
 }
 
-/** Decodes a run of octets as UTF-8. Undefined when the bytes are not one valid text. */
-function decodeOctets(octets: readonly number[]): string | undefined {
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(octets));
-  } catch (error) {
-    // Invalid UTF-8 is the expected outcome for a bad escape, and it is the caller's answer, not a fault.
-    if (error instanceof TypeError) return undefined;
-    throw error;
-  }
-}
-
 /**
  * Decodes percent escapes once. Plus signs are not spaces here (path semantics).
  *
@@ -97,33 +86,14 @@ function decodeOctets(octets: readonly number[]): string | undefined {
  * @returns The decoded text, or undefined when any escape is malformed.
  */
 export function percentDecodeStrict(text: string): string | undefined {
-  if (!text.includes("%")) return text;
-  let out = "";
-  let octets: number[] = [];
-  let index = 0;
-  while (index < text.length) {
-    if (text.charAt(index) === "%") {
-      const octet = octetAt(text, index);
-      if (octet < 0) return undefined;
-      octets.push(octet);
-      index += 3;
-      continue;
-    }
-    if (octets.length > 0) {
-      const run = decodeOctets(octets);
-      if (run === undefined) return undefined;
-      out += run;
-      octets = [];
-    }
-    out += text.charAt(index);
-    index += 1;
+  // The native decoder is strict: a malformed escape or bytes that are not one valid UTF-8 text throw a
+  // URIError, and it keeps a byte order mark where `TextDecoder` would drop it (`/%EF%BB%BF` is not the root).
+  try {
+    return decodeURIComponent(text);
+  } catch (error) {
+    if (error instanceof URIError) return undefined;
+    throw error;
   }
-  if (octets.length > 0) {
-    const run = decodeOctets(octets);
-    if (run === undefined) return undefined;
-    out += run;
-  }
-  return out;
 }
 
 /** Length in bytes of the UTF-8 sequence that starts with `lead`, or 0 when it cannot start one. */
@@ -154,13 +124,7 @@ export function percentDecodeLenient(text: string): string {
     }
     const lead = octetAt(text, index);
     const length = lead < 0 ? 0 : sequenceLength(lead);
-    const octets: number[] = [];
-    for (let step = 0; step < length; step += 1) {
-      const octet = octetAt(text, index + step * 3);
-      if (octet < 0) break;
-      octets.push(octet);
-    }
-    const run = length > 0 && octets.length === length ? decodeOctets(octets) : undefined;
+    const run = length > 0 ? percentDecodeStrict(text.slice(index, index + length * 3)) : undefined;
     if (run === undefined) {
       out += "%";
       index += 1;

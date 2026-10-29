@@ -368,9 +368,12 @@ export interface Navigator {
   navigate(to: string, options?: NavigateOptions): Promise<NavigationOutcome>;
   /** Warms the loader cache for a target. Never commits, never blocked, errors go to onError. */
   preload(to: string, signal?: AbortSignal): Promise<void>;
-  /** Loads the current location with the hydrate intent. No history write. */
+  /** Loads the current location with the hydrate intent. No history write. Waits for a navigation in flight. */
   hydrate(): Promise<NavigationOutcome>;
-  /** Reloads the current location, ignoring freshness. No history write. */
+  /**
+   * Reloads the current location, ignoring freshness. No history write. A navigation in flight is not
+   * canceled: the reload waits for it and then reloads the location it reached.
+   */
   reload(): Promise<NavigationOutcome>;
   getSnapshot(): NavigationSnapshot;
   subscribe(listener: (snapshot: NavigationSnapshot) => void): () => void;
@@ -384,7 +387,6 @@ type Target =
       readonly search: string;
       readonly hash: string;
     }
-  | { readonly kind: "malformed" }
   | { readonly kind: "error"; readonly error: unknown };
 
 type AttemptResult =
@@ -495,6 +497,8 @@ export function createNavigator(options: NavigatorOptions): Navigator {
   let destroyed = false;
   let generation = 0;
   let activeController: AbortController | undefined;
+  /** The navigation a caller started (`navigate`, a pop) and that has not settled; a reload waits for it. */
+  let userNavigation: Promise<NavigationOutcome> | undefined;
   let selfWriting = false;
   let pendingTimer: unknown;
   let pendingMinTimer: unknown;
@@ -595,10 +599,13 @@ export function createNavigator(options: NavigatorOptions): Navigator {
     }
   }
 
-  /** Parses an absolute location (from history or a redirect hop). */
+  /**
+   * Parses an absolute location (from history or a redirect hop). A pathname that cannot be
+   * canonicalized (`/%zz`, `/a//b`) keeps its text: it matches no route, so it commits as not found
+   * at the location the URL holds.
+   */
   function locationTarget(pathname: string, search: string, hash: string): Target {
-    const canonical = canonicalizePathname(pathname, trailingSlash);
-    if (canonical === undefined) return { kind: "malformed" };
+    const canonical = canonicalizePathname(pathname, trailingSlash) ?? pathname;
     return { kind: "target", pathname: canonical, search, hash };
   }
 
@@ -629,8 +636,15 @@ export function createNavigator(options: NavigatorOptions): Navigator {
     }
     const resolved = resolveLocation(current, normalized);
     const canonical = canonicalizePathname(resolved.pathname, trailingSlash);
-    if (canonical === undefined) return { kind: "malformed" };
-    const pathname = normalized.startsWith("/") ? matcher.addBase(canonical) : canonical;
+    let pathname = canonical ?? resolved.pathname;
+    if (normalized.startsWith("/")) {
+      // A malformed path matches nothing, but it stays under the base: the base is added to the raw text
+      // (adding it to the empty path gives the base itself). The root's slash is the policy's to give.
+      pathname =
+        canonical === undefined || (canonical === "/" && trailingSlash !== "never")
+          ? matcher.addBase("") + pathname
+          : matcher.addBase(canonical);
+    }
     return { kind: "target", pathname, search: resolved.search, hash: resolved.hash };
   }
 
@@ -832,7 +846,7 @@ export function createNavigator(options: NavigatorOptions): Navigator {
     beginPending(token, request.intent);
     setStatus(token, "matching");
 
-    return (async (): Promise<NavigationOutcome> => {
+    const done = (async (): Promise<NavigationOutcome> => {
       let finalOutcome: NavigationOutcome | undefined;
       try {
         let target: Target = request.start;
@@ -842,10 +856,6 @@ export function createNavigator(options: NavigatorOptions): Navigator {
         for (;;) {
           if (target.kind === "error") {
             finalOutcome = { kind: "error", error: target.error };
-            break;
-          }
-          if (target.kind === "malformed") {
-            finalOutcome = { kind: "notFound", routeId: undefined };
             break;
           }
           setStatus(token, "beforeLoad");
@@ -871,7 +881,7 @@ export function createNavigator(options: NavigatorOptions): Navigator {
             }
             const { signal } = result;
             if (signal.replaceGiven) replace = signal.replace;
-            target = parseTarget(signal.to, target.kind === "target" ? target : currentLocation());
+            target = parseTarget(signal.to, target);
             continue;
           }
           if (result.kind === "canceled") {
@@ -884,10 +894,11 @@ export function createNavigator(options: NavigatorOptions): Navigator {
             break;
           }
           setStatus(token, "committing");
-          const location: RouteLocation =
-            target.kind === "target"
-              ? { pathname: target.pathname, search: target.search, hash: target.hash }
-              : currentLocation();
+          const location: RouteLocation = {
+            pathname: target.pathname,
+            search: target.search,
+            hash: target.hash,
+          };
           if (result.kind === "notFound") {
             commit(
               token,
@@ -925,6 +936,14 @@ export function createNavigator(options: NavigatorOptions): Navigator {
       }
       return finalOutcome ?? { kind: "canceled" };
     })();
+    if (request.intent === "navigate") {
+      userNavigation = done;
+      // `done` never rejects: the body above catches everything.
+      void done.then(() => {
+        if (userNavigation === done) userNavigation = undefined;
+      });
+    }
+    return done;
   }
 
   /** Writes the history entry (when asked) and publishes the new snapshot. Returns false if blocked. */
@@ -965,6 +984,16 @@ export function createNavigator(options: NavigatorOptions): Navigator {
       replace: false,
       state: undefined,
     });
+
+  /**
+   * Replays the current location for a reload or a hydrate. It never cancels a navigation the caller
+   * started: it waits for that navigation and then replays where it landed, so the data is fresh.
+   */
+  function replayAfterNavigation(intent: LoadIntent): Promise<NavigationOutcome> {
+    const active = userNavigation;
+    if (active === undefined) return replay(intent);
+    return active.then(() => replayAfterNavigation(intent));
+  }
 
   const unlisten = history.listen((update: HistoryUpdate) => {
     if (!(selfWriting || destroyed)) void replay("navigate", update.location);
@@ -1010,9 +1039,9 @@ export function createNavigator(options: NavigatorOptions): Navigator {
       }
     },
 
-    hydrate: () => replay("hydrate"),
+    hydrate: () => replayAfterNavigation("hydrate"),
 
-    reload: () => replay("reload"),
+    reload: () => replayAfterNavigation("reload"),
 
     getSnapshot(): NavigationSnapshot {
       return snapshot;

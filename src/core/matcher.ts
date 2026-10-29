@@ -118,7 +118,10 @@ export interface RouteMatcher {
   match(pathname: string, visibility?: RouteVisibility): readonly RouteMatch[];
   /** Pathname relative to the base path, or undefined when it is outside the base. */
   stripBase(pathname: string): string | undefined;
-  /** Joins the base path to an app-relative path. */
+  /**
+   * Joins the base path to an app-relative path. A trailing slash of `path` is kept, except the
+   * root's: `/` becomes `/base`, and the empty path becomes the base itself.
+   */
   addBase(path: string): string;
   /**
    * Checks params against the filters of the route pattern they are for (`/posts/:id`). Returns the
@@ -674,7 +677,10 @@ export function createMatcher(
           __DEV__ ? `cannot add a base to the invalid path "${path}"` : "SHADOW_BASE_PATH_ADD",
         );
       }
-      return `/${[...basePieces, ...tail].join("/")}`;
+      const joined = `/${[...basePieces, ...tail].join("/")}`;
+      // The join drops the trailing slash that the policy gave the path, so it is put back (`/.\/` is
+      // "some character, then the slash": the root has none).
+      return /.\/$/.test(path) ? `${joined}/` : joined;
     },
     checkParams(
       pattern: string,

@@ -102,6 +102,7 @@ export interface LoaderCache {
     readonly deps?: unknown;
     readonly tags?: readonly string[];
     readonly value: unknown;
+    /** When the data was loaded; a time after now is read as now. Default: now. */
     readonly updatedAt?: number;
   }): void;
   /** Reads an entry without changing its recency. */
@@ -388,13 +389,14 @@ export function createLoaderCache(options: LoaderCacheOptions): LoaderCache {
     seed(entry): void {
       if (destroyed) return;
       const { key, paramsKey } = keyOf(entry.routeId, entry.params, entry.deps);
+      // A server clock that runs ahead must not keep the data fresh for longer than `staleTime`.
       store(
         key,
         paramsKey,
         entry.routeId,
         entry.tags ?? [],
         entry.value,
-        entry.updatedAt ?? options.now(),
+        Math.min(entry.updatedAt ?? Infinity, options.now()),
       );
     },
 

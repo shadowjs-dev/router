@@ -118,7 +118,8 @@ function collapseLeadingSlashes(text: string): string {
 /**
  * Resolves a user-supplied target against the current URL and returns the same-origin path,
  * query and fragment, or undefined when the target would leave the origin or is not allowed.
- * Protocol-relative input (`//host/x`, `/\host`) becomes the same-origin path `/host/x`.
+ * Protocol-relative input (`//host/x`, `/\host`) becomes the same-origin path `/host/x`, and so does a
+ * path whose dot segments leave an empty first segment (`/.//host`).
  *
  * @param target Target as the caller received it.
  * @param base Absolute URL of the current page.
@@ -137,5 +138,7 @@ export function resolveSameOrigin(target: string, base: string): string | undefi
   if (baseOrigin === "null") return undefined;
   const resolved = new URL(candidate, base);
   if (resolved.origin !== baseOrigin) return undefined;
-  return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  // Dot segments can leave an empty first segment (`/.//host`), and `//host` parses as another origin
+  // once the result is used as a URL again: keep one slash, as the history does.
+  return `${collapseLeadingSlashes(resolved.pathname)}${resolved.search}${resolved.hash}`;
 }

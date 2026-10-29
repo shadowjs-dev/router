@@ -106,6 +106,8 @@ export function useBlocker(shouldBlock: (transition: BlockedTransition) => boole
   const registry = registryOf("useBlocker");
   const [held, setHeld] = useSignal<Held | undefined>(undefined, { equals: false });
   const release = registry.add((transition: Transition) => {
+    // A new transition replaces the pending one in the history, so a hold on the old one is over.
+    if (held() !== undefined) setHeld(undefined);
     const view = viewOf(transition);
     if (!shouldBlock(view)) return "allow";
     setHeld({ transition, view });

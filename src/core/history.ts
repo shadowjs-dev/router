@@ -445,14 +445,17 @@ function createCore(platform: Platform, options: HistoryOptions): History {
     const location = platform.readLocation();
     const stamp = readStamp(platform.readRawState());
     if (stamp === undefined) {
-      // An entry this history did not write. Adopt it at the logical index; blockers are not asked.
+      // An entry this history did not write (a native `#fragment` click pushes one). Adopt it one past
+      // the logical index, so it stays distinct from the entry before it and Back returns there.
+      // Blockers are not asked.
+      const adopted = current.index + 1;
       platform.write({
         replace: true,
-        index: current.index,
+        index: adopted,
         location,
-        raw: stampOf(current.index, undefined),
+        raw: stampOf(adopted, undefined),
       });
-      commitPop(location, undefined, current.index);
+      commitPop(location, undefined, adopted);
       return;
     }
     if (bypassIndex !== undefined && stamp.index === bypassIndex) {
