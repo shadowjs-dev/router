@@ -1,6 +1,7 @@
 /**
  * Classification of link targets, shared by `<A>` and the router.
  */
+import { asciiLowercase } from "../core/encoding";
 
 /**
  * True for an absolute URL (any scheme) or a protocol-relative one. Those are never routed. Browsers
@@ -37,9 +38,13 @@ export function withoutTrailingSlashes(pathname: string): string {
   return end === pathname.length ? pathname : pathname.slice(0, end);
 }
 
-/** A pathname without a trailing slash (the root stays `/`), for active-state comparison. */
-export function comparablePath(pathname: string): string {
-  return pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
+/**
+ * A pathname without a trailing slash (the root stays `/`), for active-state comparison. A router that ignores case
+ * (the default) also compares ASCII letters without case, since it renders `/About` with the route of `/about`.
+ */
+export function comparablePath(pathname: string, caseSensitive: boolean): string {
+  const trimmed = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
+  return caseSensitive ? trimmed : asciiLowercase(trimmed);
 }
 
 /** Joins the class names that are present, or returns undefined when none is. */

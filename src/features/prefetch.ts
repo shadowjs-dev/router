@@ -153,7 +153,10 @@ export function prefetch(options: PrefetchOptions = {}): RouterFeature {
   return {
     id: "prefetch",
     install(host): void {
-      const queue = createPrefetchQueue({ concurrency: options.concurrency ?? 3 });
+      const queue = createPrefetchQueue({
+        concurrency: options.concurrency ?? 3,
+        onError: host.report,
+      });
       const report = options.report;
       const detach = report?.attach(host, freshFor);
       // Target key -> time until which it counts as loaded.

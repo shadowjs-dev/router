@@ -352,7 +352,9 @@ function buildEndpoints(flat: readonly FlatRoute[], caseSensitive: boolean): End
         ];
         if (optionalCount(pieces) > MAX_OPTIONAL_SEGMENTS) {
           throw new PatternSyntaxError(
-            `route "${route.id}" has more than ${MAX_OPTIONAL_SEGMENTS} optional segments on one path`,
+            __DEV__
+              ? `route "${route.id}" has more than ${MAX_OPTIONAL_SEGMENTS} optional segments on one path`
+              : "SHADOW_TOO_MANY_OPTIONALS",
           );
         }
         const key = variantStructureKey(

@@ -165,9 +165,11 @@ export function useSearchParams<S = SearchRecord>(
   validate?: (search: SearchRecord) => S,
 ): readonly [Accessor<S>, (next: SearchUpdate<S>, options?: SearchSetOptions) => void] {
   const location = useLocation();
-  const router = useRouter();
+  const core = currentCore("useSearchParams");
+  const router = core.router;
   const read = (): S => {
-    const record = parseSearch(location.search);
+    // The router's own limit: a longer query than the default 4096 is legal when the app raised `maxSearchLength`.
+    const record = parseSearch(location.search, { maxLength: core.maxSearchLength });
     return validate === undefined ? (record as S) : validate(record);
   };
   const batch = createSearchBatch((patch, replace) => {

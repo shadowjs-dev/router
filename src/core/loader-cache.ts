@@ -76,6 +76,12 @@ export interface LoaderCacheOptions {
   readonly gcTime?: number;
   /** Receives errors of background revalidations, which no consumer awaits. */
   readonly onError?: (error: unknown, routeId: string) => void;
+  /**
+   * Tells a value that stands for a failed load (a router stores a loader's error as its data, so the page can render
+   * it). Such an entry is never served as fresh to a navigation or a preload, whatever `staleTime` says, so a failure
+   * that may be transient is retried at the next visit; a `hydrate` load still shows it, since the server rendered it.
+   */
+  readonly isFailure?: (value: unknown) => boolean;
 }
 
 /**
@@ -123,11 +129,20 @@ interface Entry {
   value: unknown;
   updatedAt: number;
   invalidated: boolean;
+  /** The value stands for a failed load: never fresh, except for the hydrate that shows the server's result. */
+  readonly failed: boolean;
   lastUsed: number;
 }
 
 interface Flight {
   readonly controller: AbortController;
+  readonly routeId: string;
+  readonly paramsKey: string;
+  readonly tags: readonly string[];
+  /** An invalidation matched this flight while it ran, so what it loads is already stale when it lands. */
+  invalidated: boolean;
+  /** A newer flight took this one's place in the table, so its result must not overwrite the newer entry. */
+  superseded: boolean;
   /** Consumers still waiting on this flight. */
   refs: number;
   canceled: boolean;
@@ -161,6 +176,7 @@ export function createLoaderCache(options: LoaderCacheOptions): LoaderCache {
   const gcTime = options.gcTime ?? DEFAULT_GC_TIME;
   const newController =
     options.createAbortController ?? ((): AbortController => new AbortController());
+  const isFailure = options.isFailure;
   const entries = new SieveCache<string, Entry>(maxEntries);
   const flights = new Map<string, Flight>();
   let gcTimer: { readonly handle: unknown } | undefined;
@@ -204,6 +220,7 @@ export function createLoaderCache(options: LoaderCacheOptions): LoaderCache {
     tags: readonly string[],
     value: unknown,
     updatedAt: number,
+    invalidated: boolean = false,
   ): void {
     entries.set(key, {
       routeId,
@@ -211,7 +228,8 @@ export function createLoaderCache(options: LoaderCacheOptions): LoaderCache {
       tags,
       value,
       updatedAt,
-      invalidated: false,
+      invalidated,
+      failed: isFailure?.(value) === true,
       lastUsed: updatedAt,
     });
     scheduleGc();
@@ -237,14 +255,19 @@ export function createLoaderCache(options: LoaderCacheOptions): LoaderCache {
     });
     const flight: Flight = {
       controller,
+      routeId: request.routeId,
+      paramsKey,
+      tags,
+      invalidated: false,
+      superseded: false,
       refs: 0,
       canceled: false,
       settled: false,
       promise: work.then(
         (value: unknown) => {
           forget(key, flight);
-          if (!flight.canceled && !controller.signal.aborted) {
-            store(key, paramsKey, request.routeId, tags, value, options.now());
+          if (!flight.canceled && !flight.superseded && !controller.signal.aborted) {
+            store(key, paramsKey, request.routeId, tags, value, options.now(), flight.invalidated);
           }
           return value;
         },
@@ -306,10 +329,13 @@ export function createLoaderCache(options: LoaderCacheOptions): LoaderCache {
     background: boolean,
   ): Flight {
     const existing = flights.get(key);
-    if (existing !== undefined) return existing;
+    // A flight that an invalidation matched began before the change: a new request starts its own, and the old one
+    // (still answering its own consumers) no longer writes the cache.
+    if (existing !== undefined && !existing.invalidated) return existing;
     const flight = startFlight(key, paramsKey, request, background);
+    if (existing !== undefined) existing.superseded = true;
     // Beyond the cap a flight still runs, it is simply not shared, which bounds the table.
-    if (flights.size < maxEntries) flights.set(key, flight);
+    if (existing !== undefined || flights.size < maxEntries) flights.set(key, flight);
     return flight;
   }
 
@@ -342,12 +368,17 @@ export function createLoaderCache(options: LoaderCacheOptions): LoaderCache {
         const threshold = request.intent === "preload" ? preloadStaleTime : staleTime;
         const fresh =
           !existing.invalidated &&
-          (request.intent === "hydrate" || now - existing.updatedAt < threshold);
+          (request.intent === "hydrate" ||
+            (!existing.failed && now - existing.updatedAt < threshold));
         if (fresh) return Promise.resolve(existing.value as T);
+        // A failed entry is not shown while it refreshes: the visitor would see the old error again.
         const backgroundRefresh =
-          request.intent === "navigate" && request.staleReload !== "blocking";
+          request.intent === "navigate" && request.staleReload !== "blocking" && !existing.failed;
         if (backgroundRefresh) {
-          if (!flights.has(key)) flightFor(key, paramsKey, request, true);
+          const running = flights.get(key);
+          if (running === undefined || running.invalidated) {
+            flightFor(key, paramsKey, request, true);
+          }
           return Promise.resolve(existing.value as T);
         }
       }
@@ -374,17 +405,27 @@ export function createLoaderCache(options: LoaderCacheOptions): LoaderCache {
       return {
         value: entry.value,
         updatedAt: entry.updatedAt,
-        stale: entry.invalidated || options.now() - entry.updatedAt >= staleTime,
+        stale: entry.invalidated || entry.failed || options.now() - entry.updatedAt >= staleTime,
       };
     },
 
     invalidate(filter: InvalidateFilter): void {
       const paramsKey = filter.params === undefined ? undefined : canonicalKey(filter.params);
+      const matches = (target: {
+        readonly routeId: string;
+        readonly paramsKey: string;
+        readonly tags: readonly string[];
+      }): boolean =>
+        (filter.routeId === undefined || target.routeId === filter.routeId) &&
+        (paramsKey === undefined || target.paramsKey === paramsKey) &&
+        (filter.tag === undefined || target.tags.includes(filter.tag));
       for (const [, entry] of entries.entries()) {
-        if (filter.routeId !== undefined && entry.routeId !== filter.routeId) continue;
-        if (paramsKey !== undefined && entry.paramsKey !== paramsKey) continue;
-        if (filter.tag !== undefined && !entry.tags.includes(filter.tag)) continue;
-        entry.invalidated = true;
+        if (matches(entry)) entry.invalidated = true;
+      }
+      // A load that is running now began before this call, so the data it brings may not include the change that
+      // caused it: it lands as stale and the next navigation fetches again.
+      for (const flight of flights.values()) {
+        if (matches(flight)) flight.invalidated = true;
       }
     },
 

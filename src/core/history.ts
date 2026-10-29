@@ -211,23 +211,23 @@ function hrefOf(location: RawLocation): string {
   return `${location.pathname}${location.search}${location.hash}`;
 }
 
-/** Removes dot segments, keeping a trailing slash when the input had one. */
+/**
+ * Removes dot segments, keeping a trailing slash when the input had one. A dot written `%2e` (any case) counts as a
+ * dot, as the URL standard reads it: the browser resolves `/a/%2e%2e/b` to `/b` when the URL is written to the address
+ * bar, so the router must resolve it the same way, or its location and the browser's would name different pages.
+ */
 function normalizeDots(path: string): string {
-  const segments = path.split("/");
-  const last = segments[segments.length - 1];
   const out: string[] = [];
-  for (const segment of segments.slice(1)) {
-    if (segment === ".") continue;
-    if (segment === "..") {
-      out.pop();
-      continue;
-    }
-    out.push(segment);
+  let slash = false;
+  for (const segment of path.split("/").slice(1)) {
+    const dot = segment.replaceAll(/%2e/gi, ".");
+    slash = dot === "" || dot === "." || dot === "..";
+    // No empty segment first: `/a/..//host` would become `//host`, a protocol-relative URL for pushState.
+    if (dot === "..") out.pop();
+    else if (dot !== "." && (out.length > 0 || dot !== "")) out.push(segment);
   }
-  let result = `/${out.join("/")}`;
-  const keepsTrailingSlash = last === "." || last === ".." || last === "";
-  if (keepsTrailingSlash && !result.endsWith("/")) result += "/";
-  return result;
+  const result = `/${out.join("/")}`;
+  return slash && !result.endsWith("/") ? `${result}/` : result;
 }
 
 interface TargetParts {
@@ -312,6 +312,17 @@ export function decodeHash(hash: string): string {
   return percentDecodeLenient(hash.startsWith("#") ? hash.slice(1) : hash);
 }
 
+/** The logical entry for a platform location (copied, so the platform's own object is never held). */
+function entryAt(location: RawLocation, state: unknown, index: number): HistoryLocation {
+  return {
+    pathname: location.pathname,
+    search: location.search,
+    hash: location.hash,
+    state,
+    index,
+  };
+}
+
 /** The core: logical state, blockers, batching and the POP algorithm. */
 function createCore(platform: Platform, options: HistoryOptions): History {
   const scheduleFlush = options.scheduleFlush ?? ((run: () => void): void => queueMicrotask(run));
@@ -337,14 +348,7 @@ function createCore(platform: Platform, options: HistoryOptions): History {
     index = initialStamp.index;
     state = initialStamp.state;
   }
-  const start = platform.readLocation();
-  let current: HistoryLocation = {
-    pathname: start.pathname,
-    search: start.search,
-    hash: start.hash,
-    state,
-    index,
-  };
+  let current = entryAt(platform.readLocation(), state, index);
 
   function flush(): void {
     flushScheduled = false;
@@ -382,27 +386,9 @@ function createCore(platform: Platform, options: HistoryOptions): History {
   }
 
   function commitWrite(action: "PUSH" | "REPLACE", location: RawLocation, data: unknown): void {
-    if (action === "PUSH") {
-      const next: HistoryLocation = {
-        pathname: location.pathname,
-        search: location.search,
-        hash: location.hash,
-        state: data,
-        index: current.index + 1,
-      };
-      current = next;
-      enqueue({ replace: false, index: next.index, location, raw: stampOf(next.index, data) });
-    } else {
-      const next: HistoryLocation = {
-        pathname: location.pathname,
-        search: location.search,
-        hash: location.hash,
-        state: data,
-        index: current.index,
-      };
-      current = next;
-      enqueue({ replace: true, index: next.index, location, raw: stampOf(next.index, data) });
-    }
+    const push = action === "PUSH";
+    current = entryAt(location, data, push ? current.index + 1 : current.index);
+    enqueue({ replace: !push, index: current.index, location, raw: stampOf(current.index, data) });
     notify(action, current);
   }
 
@@ -449,13 +435,7 @@ function createCore(platform: Platform, options: HistoryOptions): History {
   }
 
   function commitPop(location: RawLocation, data: unknown, target: number): void {
-    current = {
-      pathname: location.pathname,
-      search: location.search,
-      hash: location.hash,
-      state: data,
-      index: target,
-    };
+    current = entryAt(location, data, target);
     notify("POP", current);
   }
 
@@ -489,14 +469,7 @@ function createCore(platform: Platform, options: HistoryOptions): History {
     // Revert first: the browser already moved, and the logical location must stay put while a
     // blocker decides. The revert's popstate lands on current.index and is ignored above.
     platform.go(-delta);
-    const next: HistoryLocation = {
-      pathname: location.pathname,
-      search: location.search,
-      hash: location.hash,
-      state: stamp.state,
-      index: stamp.index,
-    };
-    offer(makeTransition("POP", next, delta));
+    offer(makeTransition("POP", entryAt(location, stamp.state, stamp.index), delta));
   }
 
   function navigate(action: "PUSH" | "REPLACE", to: string, data: unknown): boolean {
@@ -512,14 +485,7 @@ function createCore(platform: Platform, options: HistoryOptions): History {
       effective = "REPLACE";
     }
     pending = undefined;
-    const location: HistoryLocation = {
-      pathname: target.pathname,
-      search: target.search,
-      hash: target.hash,
-      state: data,
-      index: current.index,
-    };
-    const transition = makeTransition(effective, location, undefined);
+    const transition = makeTransition(effective, entryAt(target, data, current.index), undefined);
     if (blockers.length === 0) {
       perform(transition);
       return true;

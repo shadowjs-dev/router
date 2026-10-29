@@ -7,7 +7,8 @@ import type { HydrationMatch, RouterCacheOptions, RouterFeature, RouteSpec } fro
 
 /**
  * The `loaders` feature: the loader cache. It holds loader data by route, params and deps; shares
- * in-flight loads; serves stale data while it refreshes; and makes `preload`, `invalidate`,
+ * in-flight loads; serves stale data while it refreshes; refetches a failed load at the next visit whatever the
+ * `staleTime`; marks the result of a load that an `invalidate` overtook as stale; and makes `preload`, `invalidate`,
  * `dehydrate` and `hydrate` act on the data. A route with a `loader` needs it.
  *
  * @param options Cache limits: `maxEntries` (200), `staleTime` (0: a navigation refetches),
@@ -31,6 +32,8 @@ export function loaderCache(options: RouterCacheOptions = {}): RouterFeature {
         preloadStaleTime: options.preloadStaleTime ?? 30_000,
         gcTime: options.gcTime ?? 300_000,
         onError: (error: unknown) => host.report(error),
+        // A loader's error is kept as its data, but it must not count as fresh data: the next visit retries.
+        isFailure: (value: unknown) => value instanceof LoaderFailure,
       });
       host.capabilities.loaders = cache;
       const hydration: HydrationCapability = {

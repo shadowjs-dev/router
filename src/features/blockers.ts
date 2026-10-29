@@ -1,4 +1,4 @@
-import { onCleanup, useSignal } from "@shadow-js/core";
+import { onCleanup, untrack, useSignal } from "@shadow-js/core";
 import type { Transition } from "../core/index";
 import type { BlockerRegistry } from "../internal/capabilities";
 import type { TransitionGuard } from "../internal/core";
@@ -29,8 +29,9 @@ export function blockers(): RouterFeature {
        */
       const gate = (transition: Transition): void => {
         let held = false;
+        // Untracked: a history change may start inside an effect, and the predicates read the app's state.
         for (const guard of [...guards]) {
-          if (guard(transition) === "hold") held = true;
+          if (untrack(() => guard(transition)) === "hold") held = true;
         }
         if (!held) transition.proceed();
       };

@@ -59,7 +59,17 @@ export const MAX_SEARCH_LENGTH = 4096;
  */
 export const MAX_JSON_DEPTH = 16;
 
-const FORBIDDEN_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
+/**
+ * Keys that would reach the prototype chain: dropped from every record the router builds.
+ * @example
+ * FORBIDDEN_KEYS.has("__proto__"); // true
+ * @since 1.0.0
+ */
+export const FORBIDDEN_KEYS: ReadonlySet<string> = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+]);
 
 /**
  * Options for {@link parseSearch}.

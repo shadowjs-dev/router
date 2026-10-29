@@ -214,7 +214,9 @@ export function parsePattern(pattern: string): ParsedPattern {
   }
   if (optionals > MAX_OPTIONAL_SEGMENTS) {
     throw new PatternSyntaxError(
-      `pattern "${pattern}" has ${optionals} optional segments (max ${MAX_OPTIONAL_SEGMENTS})`,
+      __DEV__
+        ? `pattern "${pattern}" has ${optionals} optional segments (max ${MAX_OPTIONAL_SEGMENTS})`
+        : "SHADOW_TOO_MANY_OPTIONALS",
     );
   }
   return { source: pattern, segments };
@@ -394,8 +396,11 @@ export type ParamsOf<P extends string> = Simplify<ParamsFromSegments<SplitPath<P
  * @param pattern Route pattern.
  * @param params Values for each required param (and any optional params that should appear).
  * @returns Escaped path beginning with `/`.
- * @throws RangeError when a required param is missing or empty, or when a present optional follows
- *   a missing one (the result would match a different variant).
+ * @throws RangeError when a required param is missing or empty, when a present optional follows
+ *   a missing one (the result would match a different variant), or when a param value (or a piece of a
+ *   splat value) is `.` or `..`. A browser and the WHATWG URL parser collapse those dot segments, also
+ *   when written `%2e`, so no escaped form of them reaches the route; a link built from one would go to
+ *   another page.
  * @example buildPath("/users/:id", { id: "a b" }) // "/users/a%20b"
  * @since 1.0.0
  */
@@ -434,31 +439,10 @@ export function buildPathFromParams(
       continue;
     }
     const value = Object.hasOwn(params, segment.name) ? params[segment.name] : undefined;
-    if (segment.kind === "splat") {
-      if (value === undefined || value === "") {
-        // The required splat never matches its own folder, so a link to it must carry a value.
-        if (segment.optional === true) continue;
-        throw new RangeError(
-          __DEV__
-            ? `missing required param "${segment.name}" for "${pattern}"`
-            : "SHADOW_MISSING_PARAM",
-        );
-      }
-      for (const piece of value.split("/")) {
-        if (piece === "") {
-          throw new RangeError(
-            __DEV__
-              ? `splat "${segment.name}" has an empty piece in "${value}"`
-              : "SHADOW_SPLAT_PIECE",
-          );
-        }
-        parts.push(encodeSegment(piece));
-      }
-      continue;
-    }
     if (value === undefined || value === "") {
-      if (segment.kind === "optional") {
-        missingOptional = true;
+      // The required splat never matches its own folder, so a link to it must carry a value.
+      if (segment.kind === "optional") missingOptional = true;
+      if (segment.kind === "optional" || (segment.kind === "splat" && segment.optional === true)) {
         continue;
       }
       throw new RangeError(
@@ -469,12 +453,35 @@ export function buildPathFromParams(
     }
     if (segment.kind === "optional" && missingOptional) {
       throw new RangeError(
-        `optional param "${segment.name}" cannot follow a missing optional param in "${pattern}"`,
+        __DEV__
+          ? `optional param "${segment.name}" cannot follow a missing optional param in "${pattern}"`
+          : "SHADOW_OPTIONAL_AFTER_MISSING",
       );
     }
-    parts.push(encodeSegment(value));
+    for (const piece of segment.kind === "splat" ? value.split("/") : [value]) {
+      if (piece === "") {
+        throw new RangeError(
+          __DEV__
+            ? `splat "${segment.name}" has an empty piece in "${value}"`
+            : "SHADOW_SPLAT_PIECE",
+        );
+      }
+      parts.push(checkedPiece(piece, segment.name));
+    }
   }
   return parts.length === 0 ? "/" : `/${parts.join("/")}`;
+}
+
+/** Encodes a param value, refusing the two that a URL parser would collapse (`.` and `..`, in any spelling). */
+function checkedPiece(piece: string, name: string): string {
+  if (piece === "." || piece === "..") {
+    throw new RangeError(
+      __DEV__
+        ? `param "${name}" is "${piece}", a dot segment that the browser collapses; the link would go to another page`
+        : "SHADOW_DOT_PARAM",
+    );
+  }
+  return encodeSegment(piece);
 }
 
 /**

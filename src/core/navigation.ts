@@ -14,6 +14,7 @@ import {
   type TrailingSlashPolicy,
 } from "./path";
 import {
+  FORBIDDEN_KEYS,
   MAX_SEARCH_LENGTH,
   parseSearch,
   type SearchPatch,
@@ -116,17 +117,31 @@ export interface NavigateOptions {
 export class RedirectSignal {
   readonly kind = "redirect" as const;
   readonly replace: boolean;
+  /**
+   * True when the thrower chose `replace`. Only then does the signal decide how the redirected navigation writes history;
+   * otherwise the navigation that was redirected keeps its own mode (a push stays a push, a replace stays a replace).
+   */
+  readonly replaceGiven: boolean;
   private target: string | RedirectTarget;
 
-  constructor(to: string | RedirectTarget, replace: boolean) {
+  /**
+   * @param to The target location, or the object form.
+   * @param replace Whether the redirected navigation replaces the current history entry. Passing it is choosing it.
+   * @param replaceGiven `false` when `replace` is only the default `true` that `redirect()` reports (nothing was chosen).
+   */
+  constructor(to: string | RedirectTarget, replace: boolean, replaceGiven = true) {
     this.replace = replace;
+    this.replaceGiven = replaceGiven;
     this.target = to;
   }
 
   /** The target location. @throws Error for an object target read where no router or server is running. */
   get to(): string {
     if (typeof this.target !== "string") {
-      if (targetBuilder === undefined) throw new Error("redirect(): object target needs a router");
+      if (targetBuilder === undefined)
+        throw new Error(
+          __DEV__ ? "redirect(): object target needs a router" : "SHADOW_REDIRECT_TARGET",
+        );
       this.target = targetBuilder(this.target);
     }
     return this.target;
@@ -208,7 +223,10 @@ function redirectPath(target: RedirectTarget): string {
  * object with the same typed `params`, `search` and `hash` that links and navigation take.
  *
  * @param to Target: a path relative to the app, an absolute path, or `{ to, params?, search?, hash?, replace? }`.
- * @param options `replace` defaults to true (the string form).
+ * @param options `replace` (also a member of the object form) chooses how the redirected navigation writes history: `true`
+ *   replaces the current entry, `false` pushes a new one. When it is not passed, the navigation that was redirected keeps
+ *   its own mode (a `navigate()` that pushes pushes the target, one that replaces replaces it), and the signal's `replace`
+ *   member reads `true`.
  * @returns The signal to throw.
  * @throws RangeError when a pattern's required param is missing.
  * @example throw redirect("/login")
@@ -221,8 +239,8 @@ export function redirect(
   to: string | RedirectTarget,
   options: { readonly replace?: boolean } = {},
 ): RedirectSignal {
-  if (typeof to === "string") return new RedirectSignal(to, options.replace ?? true);
-  return new RedirectSignal(to, to.replace ?? true);
+  const given = typeof to === "string" ? options.replace : to.replace;
+  return new RedirectSignal(to, given ?? true, given !== undefined);
 }
 
 /**
@@ -371,7 +389,7 @@ type Target =
 
 type AttemptResult =
   | { readonly kind: "ok"; readonly matches: readonly NavigationMatch[] }
-  | { readonly kind: "redirect"; readonly to: string; readonly replace: boolean }
+  | { readonly kind: "redirect"; readonly signal: RedirectSignal }
   /** `matches` are the layouts above the route that failed, with the data their loaders returned. */
   | {
       readonly kind: "notFound";
@@ -406,11 +424,9 @@ function mergeContext(
   base: Readonly<Record<string, unknown>>,
   additions: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, unknown>> {
-  const merged: Record<string, unknown> = Object.create(null);
-  for (const key of Object.keys(base)) merged[key] = base[key];
+  const merged: Record<string, unknown> = Object.assign(Object.create(null), base);
   for (const key of Object.keys(additions)) {
-    if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
-    merged[key] = additions[key];
+    if (!FORBIDDEN_KEYS.has(key)) merged[key] = additions[key];
   }
   return merged;
 }
@@ -486,11 +502,7 @@ export function createNavigator(options: NavigatorOptions): Navigator {
   let navigationStarted = 0;
   let snapshot: NavigationSnapshot = {
     status: "idle",
-    location: {
-      pathname: history.location.pathname,
-      search: history.location.search,
-      hash: history.location.hash,
-    },
+    location: currentLocation(),
     matches: [],
     pending: false,
     error: undefined,
@@ -564,20 +576,22 @@ export function createNavigator(options: NavigatorOptions): Navigator {
   }
 
   function finishPending(token: number): void {
-    if (token !== generation) return;
+    // After destroy() no one listens, and a new timer would only outlive the navigator.
+    if (token !== generation || destroyed) return;
     if (pendingTimer !== undefined) {
       clear(pendingTimer);
       pendingTimer = undefined;
     }
     if (!snapshot.pending) return;
     const remaining = pendingMinMs - (now() - pendingSince);
+    const hide = (): void => publish({ ...snapshot, pending: false });
     if (remaining > 0) {
       pendingMinTimer = options.setTimeout(() => {
         pendingMinTimer = undefined;
-        publish({ ...snapshot, pending: false });
+        hide();
       }, remaining);
     } else {
-      publish({ ...snapshot, pending: false });
+      hide();
     }
   }
 
@@ -775,7 +789,7 @@ export function createNavigator(options: NavigatorOptions): Navigator {
 
     for (const result of results) {
       if (!result.ok && isRedirect(result.error)) {
-        return { kind: "redirect", to: result.error.to, replace: result.error.replace };
+        return { kind: "redirect", signal: result.error };
       }
     }
     for (const [depth, result] of results.entries()) {
@@ -796,7 +810,7 @@ export function createNavigator(options: NavigatorOptions): Navigator {
 
   /** A redirect or an error thrown by `beforeLoad` (a notFound is handled by the caller). */
   function classify(error: unknown): AttemptResult {
-    if (isRedirect(error)) return { kind: "redirect", to: error.to, replace: error.replace };
+    if (isRedirect(error)) return { kind: "redirect", signal: error };
     return { kind: "error", error };
   }
 
@@ -822,7 +836,8 @@ export function createNavigator(options: NavigatorOptions): Navigator {
       let finalOutcome: NavigationOutcome | undefined;
       try {
         let target: Target = request.start;
-        const replace = request.replace;
+        // A redirect that chose `replace` decides for the rest of the navigation; one that did not leaves it alone.
+        let replace = request.replace;
         let redirects = 0;
         for (;;) {
           if (target.kind === "error") {
@@ -846,11 +861,17 @@ export function createNavigator(options: NavigatorOptions): Navigator {
             if (redirects > maxRedirects) {
               finalOutcome = {
                 kind: "error",
-                error: new Error(`redirect limit of ${maxRedirects} exceeded while navigating`),
+                error: new Error(
+                  __DEV__
+                    ? `redirect limit of ${maxRedirects} exceeded while navigating`
+                    : "SHADOW_REDIRECT_LIMIT",
+                ),
               };
               break;
             }
-            target = parseTarget(result.to, target.kind === "target" ? target : currentLocation());
+            const { signal } = result;
+            if (signal.replaceGiven) replace = signal.replace;
+            target = parseTarget(signal.to, target.kind === "target" ? target : currentLocation());
             continue;
           }
           if (result.kind === "canceled") {
@@ -932,16 +953,21 @@ export function createNavigator(options: NavigatorOptions): Navigator {
     return true;
   }
 
-  const unlisten = history.listen((update: HistoryUpdate) => {
-    if (selfWriting || destroyed) return;
-    const location = update.location;
-    void run({
+  /** Runs the location history already holds (a pop, a reload, the first render): nothing is written back. */
+  const replay = (
+    intent: LoadIntent,
+    location: RouteLocation = history.location,
+  ): Promise<NavigationOutcome> =>
+    run({
       start: locationTarget(location.pathname, location.search, location.hash),
-      intent: "navigate",
+      intent,
       writeHistory: false,
       replace: false,
       state: undefined,
     });
+
+  const unlisten = history.listen((update: HistoryUpdate) => {
+    if (!(selfWriting || destroyed)) void replay("navigate", update.location);
   });
 
   return {
@@ -964,7 +990,8 @@ export function createNavigator(options: NavigatorOptions): Navigator {
       }
       const controller = newController();
       preloads.add(controller);
-      signal?.addEventListener("abort", () => controller.abort());
+      const onAbort = (): void => controller.abort();
+      signal?.addEventListener("abort", onAbort);
       try {
         const result = await attempt(
           start,
@@ -977,31 +1004,15 @@ export function createNavigator(options: NavigatorOptions): Navigator {
       } catch (error) {
         report(error);
       } finally {
+        // The caller's signal may outlive this preload (a router-wide one): it must not keep the controller.
+        signal?.removeEventListener("abort", onAbort);
         preloads.delete(controller);
       }
     },
 
-    hydrate(): Promise<NavigationOutcome> {
-      const location = history.location;
-      return run({
-        start: locationTarget(location.pathname, location.search, location.hash),
-        intent: "hydrate",
-        writeHistory: false,
-        replace: false,
-        state: undefined,
-      });
-    },
+    hydrate: () => replay("hydrate"),
 
-    reload(): Promise<NavigationOutcome> {
-      const location = history.location;
-      return run({
-        start: locationTarget(location.pathname, location.search, location.hash),
-        intent: "reload",
-        writeHistory: false,
-        replace: false,
-        state: undefined,
-      });
-    },
+    reload: () => replay("reload"),
 
     getSnapshot(): NavigationSnapshot {
       return snapshot;

@@ -700,23 +700,27 @@ export function createRouter(options: RouterOptions): Router {
       };
 
       let last: NavigationSnapshot = navigator.getSnapshot();
-      unsubscribe = navigator.subscribe((next: NavigationSnapshot) => {
-        const previous = last;
-        last = next;
-        const committed = next.location !== undefined && next.location !== previous.location;
-        if (next.status === "matching") {
-          // A navigation starts: remember where the screen was, and where it is heading. The action
-          // of the change (PUSH, POP, REPLACE) is already recorded by the history listener, and a POP
-          // fires before its navigation starts, so this must not reset it.
-          capabilities.scroll?.remember(committedIndex);
-          setRouting(routingFor(intended ?? historyTarget(), committedChain()));
-        } else if (next.status === "idle" && !next.pending) {
-          // The pending UI may outlive the commit (pendingMinMs), so the routing waits for it.
-          setRouting(undefined);
-        }
-        if (committed) committedIndex = history.location.index;
-        apply(next, committed);
-      });
+      // Untracked: the snapshot is published synchronously from `navigate()`, which an effect may be running, and
+      // the reads below (the rendered chain) must not subscribe that effect.
+      unsubscribe = navigator.subscribe((next: NavigationSnapshot) =>
+        untrack(() => {
+          const previous = last;
+          last = next;
+          const committed = next.location !== undefined && next.location !== previous.location;
+          if (next.status === "matching") {
+            // A navigation starts: remember where the screen was, and where it is heading. The action
+            // of the change (PUSH, POP, REPLACE) is already recorded by the history listener, and a POP
+            // fires before its navigation starts, so this must not reset it.
+            capabilities.scroll?.remember(committedIndex);
+            setRouting(routingFor(intended ?? historyTarget(), committedChain()));
+          } else if (next.status === "idle" && !next.pending) {
+            // The pending UI may outlive the commit (pendingMinMs), so the routing waits for it.
+            setRouting(undefined);
+          }
+          if (committed) committedIndex = history.location.index;
+          apply(next, committed);
+        }),
+      );
 
       unlistenHistory = history.listen((update: HistoryUpdate) => {
         lastAction = update.action;
@@ -727,62 +731,78 @@ export function createRouter(options: RouterOptions): Router {
         const snapshot = navigator.getSnapshot();
         const location = snapshot.location;
         const hydration = capabilities.hydration;
-        if (location === undefined || hydration === undefined) return { version: 1, matches: [] };
         return {
           version: 1,
-          matches: hydration.dehydrate({
-            matches: snapshot.matches,
-            search: location.search,
-            specs: index.specs,
-            run: runSearch,
-            maxSearchLength,
-          }),
+          matches:
+            location === undefined || hydration === undefined
+              ? []
+              : hydration.dehydrate({
+                  matches: snapshot.matches,
+                  search: location.search,
+                  specs: index.specs,
+                  run: runSearch,
+                  maxSearchLength,
+                }),
         };
       };
 
       const built: Router = {
         state: {
-          location: (): RouteLocation | undefined => locationOf(),
-          status: (): NavigationStatus => statusOf(),
-          pending: (): boolean => pendingOf(),
-          error: (): unknown => errorOf(),
-          matches: (): readonly RenderedMatch[] => committedChain(),
+          location: locationOf,
+          status: statusOf,
+          pending: pendingOf,
+          error: errorOf,
+          matches: committedChain,
         },
         history,
+        // The methods that start work run untracked: `beforeLoad` and match filters are user code that the navigator
+        // calls before its first await, so an effect that navigates must not subscribe to what they read.
         navigate(to: string, navigateOptions: NavigateToOptions = {}): Promise<NavigationOutcome> {
-          const target = buildTo(to, navigateOptions);
-          intended = resolveTarget(target);
-          capabilities.skipTransition = navigateOptions.viewTransition === false;
-          try {
-            return navigator.navigate(target, {
-              replace: navigateOptions.replace === true,
-              state: navigateOptions.state,
-            });
-          } finally {
-            intended = undefined;
-          }
+          return untrack(() => {
+            const target = buildTo(to, navigateOptions);
+            intended = resolveTarget(target);
+            capabilities.skipTransition = navigateOptions.viewTransition === false;
+            try {
+              return navigator.navigate(target, {
+                replace: navigateOptions.replace === true,
+                state: navigateOptions.state,
+              });
+            } finally {
+              intended = undefined;
+            }
+          });
         },
 
         preload(to: string, navigateOptions: RouterPreloadOptions = {}): Promise<void> {
-          return navigator.preload(buildTo(to, navigateOptions), navigateOptions.signal);
+          return untrack(() =>
+            navigator.preload(buildTo(to, navigateOptions), navigateOptions.signal),
+          );
         },
 
         invalidate(filter: InvalidateFilter = {}): Promise<NavigationOutcome> {
-          loaderCache.invalidate(filter);
-          return navigator.reload().then(syncLocation);
+          return untrack(() => {
+            loaderCache.invalidate(filter);
+            return navigator.reload().then(syncLocation);
+          });
         },
 
         ready(): Promise<NavigationOutcome> {
           if (readyPromise === undefined) {
-            readyPromise = (hydrated ? navigator.hydrate() : navigator.reload()).then(syncLocation);
+            readyPromise = untrack(() =>
+              (hydrated ? navigator.hydrate() : navigator.reload()).then(syncLocation),
+            );
           }
           return readyPromise;
         },
 
         href(to: string, navigateOptions: NavigateToOptions = {}): string {
-          const built = buildTo(to, navigateOptions);
-          const target = resolveTarget(built);
-          return target === undefined ? built : `${target.pathname}${target.search}${target.hash}`;
+          return untrack(() => {
+            const built = buildTo(to, navigateOptions);
+            const target = resolveTarget(built);
+            return target === undefined
+              ? built
+              : `${target.pathname}${target.search}${target.hash}`;
+          });
         },
 
         dehydrate,
@@ -824,6 +844,8 @@ export function createRouter(options: RouterOptions): Router {
         router: built,
         history,
         capabilities,
+        maxSearchLength,
+        caseSensitive,
         specOf: (id: string) => index.specs.get(id),
         appPathname: (pathname: string) => matcher.stripBase(pathname) ?? pathname,
         matcher,
@@ -834,10 +856,10 @@ export function createRouter(options: RouterOptions): Router {
         loaderAt,
         searchAt,
         deepest: () => deepest,
-        location: (): RouteLocation | undefined => locationOf(),
-        status: (): NavigationStatus => statusOf(),
-        pending: (): boolean => pendingOf(),
-        target: (): Routing | undefined => routing(),
+        location: locationOf,
+        status: statusOf,
+        pending: pendingOf,
+        target: routing,
         registerReset(reset: () => void): () => void {
           errored.add(reset);
           return (): void => {

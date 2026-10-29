@@ -48,11 +48,15 @@ const INERT_TICKET: PrefetchTicket = Object.freeze({
 
 /**
  * Creates a queue.
- * @param options `concurrency`: the most tasks that run at once (at least 1).
+ * @param options `concurrency`: the most tasks that run at once (at least 1). `onError`: where a synchronous throw of a task goes.
  * @returns The queue.
  * @internal
  */
-export function createPrefetchQueue(options: { readonly concurrency: number }): PrefetchQueue {
+export function createPrefetchQueue(options: {
+  readonly concurrency: number;
+  /** Receives an error a task throws before it returns its promise (a rejection is the task's own to report). */
+  readonly onError?: (error: unknown) => void;
+}): PrefetchQueue {
   const limit = Math.max(1, Math.floor(options.concurrency));
   const live = new Map<string, Entry>();
   const waiting: Entry[] = [];
@@ -81,7 +85,9 @@ export function createPrefetchQueue(options: { readonly concurrency: number }): 
       let running: Promise<unknown>;
       try {
         running = entry.task(controller.signal);
-      } catch {
+      } catch (error) {
+        // The slot is freed either way; the failure goes to the owner instead of vanishing.
+        options.onError?.(error);
         running = Promise.resolve();
       }
       running.then(settle, settle);

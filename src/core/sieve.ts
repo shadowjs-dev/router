@@ -47,7 +47,11 @@ export class SieveCache<K, V> {
    */
   constructor(capacity: number, onEvict?: (key: K, value: V) => void) {
     if (!Number.isInteger(capacity) || capacity < 1) {
-      throw new RangeError(`SieveCache capacity must be a positive integer, got ${capacity}`);
+      throw new RangeError(
+        __DEV__
+          ? `SieveCache capacity must be a positive integer, got ${capacity}`
+          : "SHADOW_SIEVE_CAPACITY",
+      );
     }
     this.#capacity = capacity;
     this.#onEvict = onEvict;

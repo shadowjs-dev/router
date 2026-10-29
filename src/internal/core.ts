@@ -59,6 +59,10 @@ export interface RouterCore {
   presentError(error: unknown): unknown;
   /** Erased spec of a route id. */
   specOf(id: string): RouteSpec | undefined;
+  /** Whether static segments compare ASCII case (`RouterOptions.caseSensitive`). */
+  readonly caseSensitive: boolean;
+  /** The longest query string this router parses (`RouterOptions.maxSearchLength`). */
+  readonly maxSearchLength: number;
   /** The pathname without the base path (what routes and links speak). */
   appPathname(pathname: string): string;
   /** Matches pathnames (with the base path) to routes. */

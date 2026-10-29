@@ -543,6 +543,28 @@ describe("prefetch: dedupe and lifetime", () => {
   });
 });
 
+describe("prefetch: bounded memory", () => {
+  it("[RTR-REV-12] the loaded targets are remembered up to a hard bound: the oldest is forgotten, the newest is kept", async () => {
+    const s = setup({ freshFor: 10_000_000 });
+    // 501 targets finish one after the other: one more than the bound of 500.
+    for (let n = 0; n <= 500; n += 1) {
+      s.link(`/p/${n}`, "render");
+      idle.flush();
+      s.loads[n]?.finish();
+      await ticks();
+    }
+    expect(s.loads).toHaveLength(501);
+    const newest = s.link("/p/500");
+    newest.anchor.dispatchEvent(new Event("focus"));
+    idle.flush();
+    expect(s.loads).toHaveLength(501);
+    const oldest = s.link("/p/0");
+    oldest.anchor.dispatchEvent(new Event("focus"));
+    idle.flush();
+    expect(s.loads).toHaveLength(502);
+  });
+});
+
 describe("prefetch: code and failures", () => {
   it("[ROUTER-PREFETCH-39] the lazy component chunks of the matched routes are requested with the data", () => {
     const s = setup(

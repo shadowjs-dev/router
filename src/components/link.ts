@@ -195,8 +195,8 @@ export function A<P extends HrefOf = never>(props: AProps<P>): unknown {
     const current = link();
     const location = core.location();
     if (current.kind !== "route" || location === undefined) return undefined;
-    const here = comparablePath(core.appPathname(location.pathname));
-    const there = comparablePath(core.appPathname(current.pathname));
+    const here = comparablePath(core.appPathname(location.pathname), core.caseSensitive);
+    const there = comparablePath(core.appPathname(current.pathname), core.caseSensitive);
     if (here === there) return "exact";
     if (props.end !== true && there !== "/" && here.startsWith(`${there}/`)) return "partial";
     return undefined;
