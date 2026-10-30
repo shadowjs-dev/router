@@ -126,8 +126,9 @@ export interface RouteErrorProps {
    */
   readonly reset: () => void;
   /**
-   * Revalidates the route's loader (its cached data is dropped and loaded again), then clears the error and rebuilds
-   * the route, as `reset` does. Use it when the route's data failed to load.
+   * Revalidates every loader on screen (as `router.invalidate()` does, with no filter: the cached data of all the
+   * matched routes is dropped and loaded again, not only this route's), then clears the error and rebuilds the
+   * route, as `reset` does. Use it when the route's data failed to load.
    */
   readonly retry: () => void;
 }

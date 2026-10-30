@@ -11,7 +11,9 @@ import { isExternalTarget, pathOnly, withoutTrailingSlashes } from "../src/inter
 /**
  * Every regular expression the router applies to a location, a path or a link target, run through the function that
  * owns it. Each family runs at a small size and at 32 times that size; linear code takes about 32 times longer,
- * quadratic code about 1,000 times longer, and the bound is 64 times (see the same test in the Dusk package).
+ * quadratic code about 1,000 times longer, and the bound is 128 times. Some linear families build long strings and
+ * measure about 35 times on an idle machine (the allocations grow with the input), so a bound of 64 left too little room
+ * for a busy one; 128 still fails quadratic code by a factor of eight.
  */
 
 function best(task: () => void, runs = 5): number {
@@ -119,7 +121,7 @@ const FAMILIES: ReadonlyArray<
 
 describe("regular expressions on locations and link targets are linear", () => {
   for (const [id, name, use, build] of FAMILIES) {
-    it(`[RTR-REDOS-${id}] ${name}: 32x the input stays under 64x the time`, () => {
+    it(`[RTR-REDOS-${id}] ${name}: 32x the input stays under 128x the time`, () => {
       const little = build(SMALL);
       const big = build(LARGE);
       use(little);
@@ -130,7 +132,7 @@ describe("regular expressions on locations and link targets are linear", () => {
       // Both sizes run once before they are timed, so neither measures a cold function (compilation, first allocation).
       use(big);
       const large = best(() => use(big), 7);
-      expect(large).toBeLessThan(small * 64);
+      expect(large).toBeLessThan(small * 128);
     });
   }
 

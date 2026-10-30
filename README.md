@@ -24,8 +24,8 @@ reactivity.
 npm install @shadow-js/router
 ```
 
-`@shadow-js/core` and `@shadow-js/web` are peer dependencies. ShadowJS 1.0.0 is not on npm yet.
-Until it is published, install it from a local checkout of this repository.
+`@shadow-js/core` and `@shadow-js/web` are peer dependencies. To try a change that is not released yet,
+install from a local checkout of this repository.
 
 ## Usage
 
@@ -253,8 +253,8 @@ The package also exports the types `Router`, `RouterOptions`, `RouteOptions`, `R
 
 - Runtime `magic-string` `^1.4.3`: edits route modules during the build (`src/vite/prune.ts`).
 - Runtime `oxc-parser` `0.153.0`: parses route modules to read their exports (`src/vite/ast.ts`).
-- Peers: `@shadow-js/core` and `@shadow-js/web` `^1.0.0`: the runtime and rendering routes use.
-- Optional peers: `vite` `^8.0.0`, needed only when using the Vite plugin.
+- Peers: `@shadow-js/core` and `@shadow-js/web` `^1.0.3`: the runtime and rendering routes use.
+- Optional peers: `vite` `^7.0.0 || ^8.0.0`, needed only when using the Vite plugin.
 
 ## Types
 
