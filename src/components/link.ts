@@ -107,11 +107,15 @@ function optionsOf(props: {
 }
 
 /** Calls a caller's event handler, in its plain or [handler, data] form. */
-function callHandler(handler: unknown, event: MouseEvent): void {
+function callHandler(handler: unknown, event: Event): void {
   if (typeof handler === "function") {
     handler(event);
   } else if (Array.isArray(handler) && typeof handler[0] === "function") {
     handler[0](handler[1], event);
+  } else if (typeof handler === "object" && handler !== null) {
+    // A listener object: `handleEvent` is its method (its `once`, `passive` and `capture` options are the element's).
+    const listener = handler as { handleEvent?: unknown };
+    if (typeof listener.handleEvent === "function") listener.handleEvent(event);
   }
 }
 
@@ -229,13 +233,19 @@ export function A<P extends HrefOf = never>(props: AProps<P>): unknown {
     const navigation = router.navigate(current.to as HrefOf, current.options);
     core.capabilities.linkStatus?.track(onClick, navigation);
   };
-  const onMouseEnter = (): void => {
+  const onMouseEnter = (event: MouseEvent): void => {
+    callHandler(props["onMouseEnter"], event);
     globalThis.clearTimeout(hover);
     if (preloadMode() === "intent") hover = globalThis.setTimeout(preloadNow, HOVER_PRELOAD_MS);
   };
-  const onIntent = (): void => {
-    if (preloadMode() === "intent") preloadNow();
-  };
+  // The caller's own handler runs first, as the click handler's does: these names are the link's, so they are not
+  // passed through to the anchor, and a handler that is not called here would be lost.
+  const onIntent =
+    (name: "onFocus" | "onTouchStart") =>
+    (event: Event): void => {
+      callHandler(props[name], event);
+      if (preloadMode() === "intent") preloadNow();
+    };
   const ref = (anchor: Element): void => {
     if (prefetch !== undefined) {
       stop = prefetch.attach(core, anchor, link, props);
@@ -281,9 +291,12 @@ export function A<P extends HrefOf = never>(props: AProps<P>): unknown {
   Object.assign(attributes, {
     onClick,
     onMouseEnter,
-    onMouseLeave: (): void => globalThis.clearTimeout(hover),
-    onFocus: onIntent,
-    onTouchStart: onIntent,
+    onMouseLeave: (event: MouseEvent): void => {
+      callHandler(props["onMouseLeave"], event);
+      globalThis.clearTimeout(hover);
+    },
+    onFocus: onIntent("onFocus"),
+    onTouchStart: onIntent("onTouchStart"),
     ref,
   });
 

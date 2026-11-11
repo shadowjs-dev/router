@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.5
+
+### Fixed
+
+- `<A>` runs the caller's `onMouseEnter`, `onMouseLeave`, `onFocus` and `onTouchStart` handlers, and an `onClick` given as a listener object.
+
 ## 1.0.4
 
 ### Changed

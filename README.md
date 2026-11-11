@@ -253,7 +253,7 @@ The package also exports the types `Router`, `RouterOptions`, `RouteOptions`, `R
 
 - Runtime `magic-string` `^1.4.3`: edits route modules during the build (`src/vite/prune.ts`).
 - Runtime `oxc-parser` `0.153.0`: parses route modules to read their exports (`src/vite/ast.ts`).
-- Peers: `@shadow-js/core` and `@shadow-js/web` `^1.0.3`: the runtime and rendering routes use.
+- Peers: `@shadow-js/core` and `@shadow-js/web` `^1.0.5`: the runtime and rendering routes use.
 - Optional peers: `vite` `^7.0.0 || ^8.0.0`, needed only when using the Vite plugin.
 
 ## Types
