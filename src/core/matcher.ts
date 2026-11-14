@@ -867,6 +867,56 @@ export function restrictMatcher(matcher: RouteMatcher, visibility: RouteVisibili
   };
 }
 
+/**
+ * A matcher that matches the routes against another path than the one it is asked about. `routePath` receives the
+ * path of the location without the mount base (as written, with the trailing slash the policy gave it) and returns
+ * the path in the route tree to match. Only `match` maps; `stripBase`, `addBase` and `checkParams` are the wrapped
+ * matcher's, so the location, the links and the history keep the path the visitor sees.
+ *
+ * A server that serves several hosts from one app rewrites each host's requests into a private folder
+ * (`dash.example.com/about` to `/_hosts/dash/about`); the browser's router gets the same mapping here, so the
+ * visible `/about` reaches the routes the server rendered. A result that is not a path (no leading slash, or a bad
+ * percent escape) matches nothing.
+ *
+ * @param matcher The matcher of the route tree.
+ * @param routePath Maps an app path to the route-tree path. Must be pure: it runs on every match.
+ * @returns A matcher with the same members.
+ * @example
+ * import { createMatcher, mapMatcher } from "@shadow-js/router/core";
+ * const matcher = mapMatcher(
+ *   createMatcher([{ id: "dash-home", path: "/_hosts/dash" }]),
+ *   (path) => (path === "/" ? "/_hosts/dash" : `/_hosts/dash${path}`),
+ * );
+ * matcher.match("/").map((m) => m.id); // ["dash-home"]
+ * @since 1.0.6
+ */
+export function mapMatcher(
+  matcher: RouteMatcher,
+  routePath: (path: string) => string,
+): RouteMatcher {
+  return {
+    match(pathname: string, visibility?: RouteVisibility): readonly RouteMatch[] {
+      const appPath = matcher.stripBase(pathname);
+      if (appPath === undefined) return NO_MATCHES;
+      const mapped: unknown = routePath(appPath);
+      if (
+        typeof mapped !== "string" ||
+        !mapped.startsWith("/") ||
+        splitPathname(mapped) === undefined
+      ) {
+        return NO_MATCHES;
+      }
+      return matcher.match(matcher.addBase(mapped), visibility);
+    },
+    stripBase: (pathname: string) => matcher.stripBase(pathname),
+    addBase: (path: string) => matcher.addBase(path),
+    checkParams: (pattern, params) => matcher.checkParams(pattern, params),
+    get cacheSize(): number {
+      return matcher.cacheSize;
+    },
+  };
+}
+
 /** Canonical base path segments, for building and matching. Throws on a malformed escape. */
 function baseSegments(basePath: string): string[] {
   const raw = splitPathname(basePath);

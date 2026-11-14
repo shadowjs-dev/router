@@ -36,6 +36,7 @@ export {
   findConflicts,
   isPrivatePattern,
   type MatcherOptions,
+  mapMatcher,
   matchRoutes,
   type ParamFilter,
   type ParamSchema,

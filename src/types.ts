@@ -477,6 +477,19 @@ export interface RouterOptions {
    * for a request from outside uses it. Default `"all"`, the browser router's behavior.
    */
   readonly visibility?: "public" | "all";
+  /**
+   * Matches the routes against another path than the one in the address bar. It receives the path of a location
+   * without the `base` (written as the history holds it) and returns the path in the route tree to match. The
+   * location, the links, `navigate` and the history keep the visible path; only the choice of routes changes.
+   *
+   * An app that serves several hosts from one route tree has the server rewrite each host into a private folder
+   * (`dash.example.com/about` to `/_hosts/dash/about`); the browser's router maps the same way, so the visible
+   * `/about` reaches the routes the server rendered. The function must be pure and must agree with the rewrite: it
+   * runs on every match, untracked. A result that is not a path matches nothing.
+   *
+   * @since 1.0.6
+   */
+  readonly routePath?: (path: string) => string;
   /** Serializes search objects for links and `navigate`. Default: the core canonical form. */
   readonly searchCodec?: SearchCodec;
   /** Initial context at the root, added to by `beforeLoad`. */

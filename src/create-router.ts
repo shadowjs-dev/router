@@ -24,6 +24,7 @@ import {
   isSafeNavigationTarget,
   type LoaderCache,
   MAX_SEARCH_LENGTH,
+  mapMatcher,
   mergeSearch,
   type NavigationOutcome,
   type NavigationSnapshot,
@@ -361,14 +362,18 @@ export function createRouter(options: RouterOptions): Router {
   const index = buildRouteIndex(options.routes, validated, runSearch);
   checkFeatures(features, index);
 
+  const routePath = options.routePath;
+  const routeMatcher = createMatcher(index.tree, {
+    basePath: base,
+    caseSensitive,
+    ...(capabilities.compileFilter === undefined
+      ? {}
+      : { compileFilter: capabilities.compileFilter }),
+  });
   const matcher: RouteMatcher = restrictMatcher(
-    createMatcher(index.tree, {
-      basePath: base,
-      caseSensitive,
-      ...(capabilities.compileFilter === undefined
-        ? {}
-        : { compileFilter: capabilities.compileFilter }),
-    }),
+    routePath === undefined
+      ? routeMatcher
+      : mapMatcher(routeMatcher, (path) => untrack(() => routePath(path))),
     options.visibility ?? "all",
   );
   const loaderCache: LoaderCache = capabilities.loaders ?? UNCACHED_LOADERS;

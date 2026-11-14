@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.6
+
+### Added
+
+- `createRouter({ routePath })` matches the routes against another path than the one in the address bar: it maps the path of the location (without the base) to a path of the route tree. The location, links, `navigate` and the history keep the visible path. For an app that serves several hosts from one route tree, where a server middleware rewrites each host into a private folder. `mapMatcher(matcher, routePath)` is the same for a matcher of `@shadow-js/router/core`.
+
 ## 1.0.5
 
 ### Fixed
