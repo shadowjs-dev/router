@@ -133,7 +133,7 @@
     }
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.6",
+    "@biomejs/biome": "2.6.8",
     "@shadow-js/compiler": "^1.1.1",
     "@shadow-js/core": "^1.1.1",
     "@shadow-js/web": "^1.1.1",
@@ -142,7 +142,7 @@
     "happy-dom": "21.0.4",
     "tsdown": "0.23.7",
     "typescript": "7.0.2",
-    "vite": "8.3.3",
+    "vite": "8.3.8",
     "vitest": "5.1.0"
   },
   "homepage": "https://router.shadowjs.net",
