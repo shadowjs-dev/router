@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.1
+
+### Changed
+
+- `oxc-parser` 0.158 (was 0.153).
+
+### Fixed
+
+- The route announcer leaves a replace that changes only the query alone (a filter or a search written into the URL): nothing is announced and focus stays on the control the reader used. A push to a new query is still announced.
+
 ## 1.1.0
 
 ### Changed

@@ -154,6 +154,29 @@ describe("route announcer", () => {
     router.dispose();
   });
 
+  it("[ANN-13 2.4.3] a replace that changes only the query keeps focus and announces nothing; a push of a new query still does", async () => {
+    const mod = await app();
+    const root = host();
+    const router = mod.start(root, new RouterTestWindow("/"), createFakeClock(0));
+    await settle();
+    await router.navigate("/about");
+    await settle();
+    const button = outsideButton();
+    await router.navigate("/about?place=geneva", { replace: true });
+    await settle();
+    expect(document.activeElement).toBe(button);
+    expect(liveRegion()?.textContent).toBe("About us");
+    liveRegion()?.replaceChildren();
+    await router.navigate("/about?place=seoul");
+    await settle();
+    expect(document.activeElement).not.toBe(button);
+    expect(liveRegion()?.textContent).toBe("About us");
+    await router.navigate("/", { replace: true });
+    await settle();
+    expect(liveRegion()?.textContent).toBe("Home page");
+    router.dispose();
+  });
+
   it("[ANN-05 2.4.3] a back navigation also moves focus to the page heading and announces it", async () => {
     const mod = await app();
     const root = host();

@@ -28,8 +28,9 @@ export interface RouteAnnouncerOptions {
  *   gets `tabindex="-1"` while it has focus (and loses it on blur), so it can take focus without joining the tab
  *   order. Focus does not scroll the page: the scroll feature decides where the page starts.
  *
- * Nothing happens on the first page (the load is not a navigation), when only the hash changes, or when the URL
- * (path and query) is the same as the page on screen. A router without a window (a memory router on a server) gets
+ * Nothing happens on the first page (the load is not a navigation), when only the hash changes, when the URL
+ * (path and query) is the same as the page on screen, or for a replace that keeps the path and changes only the query
+ * (a filter or a search written into the URL: the reader stays on the control they used). A router without a window (a memory router on a server) gets
  * no region and no focus. The feature does not poll: it runs once per committed change.
  *
  * A hash target that mounts after the commit (a lazy view) is focused by the scroll feature when it appears; until
@@ -64,17 +65,30 @@ export function routeAnnouncer(options: RouteAnnouncerOptions = {}): RouterFeatu
 
       // The page on screen, as path and query. Undefined until the first page has committed.
       let shown: string | undefined;
+      let shownPath: string | undefined;
+      // How the history last moved. A replace that keeps the path writes the page's own state into the query (a filter,
+      // a tab, a search): the reader is still on the same page, so nothing is announced and focus stays on the control.
+      let action: string | undefined;
+      const unlisten = host.history.listen((update) => {
+        action = update.action;
+      });
+      host.onDispose(unlisten);
       host.capabilities.announcer = (): void => {
         const location = host.history.location;
         // A trailing slash is the same page: the router's own replace that drops one (or adds one) is no navigation.
-        const key = `${withoutTrailingSlashes(location.pathname)}${location.search}`;
+        const path = withoutTrailingSlashes(location.pathname);
+        const key = `${path}${location.search}`;
         if (shown === undefined) {
           // The first page is loaded, not navigated to: nothing is announced and focus stays where it is.
           shown = key;
+          shownPath = path;
           return;
         }
         if (key === shown) return;
+        const sameDocument = action === "REPLACE" && path === shownPath;
         shown = key;
+        shownPath = path;
+        if (sameDocument) return;
         const heading = doc.querySelector("h1")?.textContent?.trim() ?? "";
         region.textContent =
           doc.title.trim() || heading || fallbackText(options, location.pathname);
